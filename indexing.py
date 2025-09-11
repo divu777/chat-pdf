@@ -23,6 +23,8 @@ vector_store = QdrantVectorStore.from_documents(
     url="http://localhost:6333",
     embedding=embedder,
     documents=split_docs,
-    collection_name='consent-forever'
+    collection_name='consent-forever77'
 )
+
+
 
