@@ -1,66 +1,82 @@
-from io import StringIO
 import streamlit as st 
-import pprint
-from langchain_community.document_loaders import PyPDFLoader
 import tempfile
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_openai import OpenAIEmbeddings
-from langchain_qdrant import QdrantVectorStore
-from dotenv import load_dotenv
-
-load_dotenv()
+from graph import load_document,State,compile_graph
+from langchain.schema import AIMessage
+st.title("Chatbot")
+file = st.file_uploader(type=['pdf'], label='upload your files')
 
 
-st.title("Chat With Pdf")
-st.sidebar.title("Chats")
-file = st.file_uploader("Choose your file",type="pdf")
-embedder = OpenAIEmbeddings(model='text-embedding-3-large')
+if 'messages' not in st.session_state:
+    st.session_state.messages = [{"role":"ai","content":"Hello dear how can i help you?"}]
 
-if "chat_disabled" not in st.session_state:
+if 'chat_disbaled' not in st.session_state:
     st.session_state.chat_disabled = False
 
-if "messages" not in st.session_state:
-    st.session_state["messages"]= [{"role":"ai","content":"hello, how can i help you today?"}]
+if 'file_uploaded' not in st.session_state:
+    st.session_state.file_uploaded = False
 
+if 'file_processing' not in st.session_state:
+    st.session_state.file_processing = False
 
+if 'collection_name' not in st.session_state:
+    st.session_state.collection_name = None
 
 for msg in st.session_state.messages:
     st.chat_message(msg["role"]).write(msg["content"])
 
-if not st.session_state.chat_disabled:
-    user_query = st.chat_input("Type your question...")
-else:
+
+
+if file is not None and not st.session_state.file_uploaded and not st.session_state.file_processing:
+        st.session_state.file_processing = True
+        st.info("Procesing info")
+        with tempfile.NamedTemporaryFile(suffix=".pdf",delete=True) as temp:
+            temp.write(file.getbuffer())
+            tempPath = temp.name
+            load_document(temp_path=tempPath,file=file)
+
+        st.session_state.collection_name = file.name
+        st.session_state.file_uploaded = True
+        st.session_state.file_processing = False
+
+if st.session_state.chat_disabled:
     user_query = None
-    st.info("⏳ Please wait, processing your last query...")
+    st.info("Old query being processed")
+elif st.session_state.file_processing:
+    user_query = None
+    st.info("Your file is still being processed, please wait...")
+else:
+    user_query=st.chat_input("write something");
 
 if user_query is not None:
     st.session_state.chat_disabled = True
-
-    st.session_state.messages.append({"role": "user", "content": user_query})
+    st.session_state.messages.append({"role":"user","content":user_query})
     st.chat_message("user").write(user_query)
-
-    if file is not None:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-            tmp.write(file.getbuffer())
-            temp_path = tmp.name
-
-        loader = PyPDFLoader(file_path=temp_path)
-        data = loader.load()
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=100, chunk_overlap=50)
-        split_docs = text_splitter.split_documents(documents=data)
-
-        vector_store = QdrantVectorStore.from_documents(
-            collection_name=file.name,
-            embedding=embedder,
-            documents=split_docs,
-            url="http://localhost:6333",
+    if st.session_state.file_uploaded:
+        _state = State(
+            collection_name=st.session_state.collection_name,
+            user_query=user_query,
+            messages=st.session_state["messages"],
+            uploaded_file=True,
+            context=None
         )
+    else:
+        _state = State(
+            collection_name=None,
+            context=None,
+            user_query=user_query,
+            uploaded_file=False,
+            messages=st.session_state.messages
+        )
+            
+    graph = compile_graph()
 
-        pprint("Indexing done for the pdf")
+    for events in graph.stream(_state,stream_mode='values'):
+        if 'messages' in events:
+            last_msg = events['messages'][-1]
+
+            if isinstance(last_msg,AIMessage):
+                st.session_state.messages.append({"role":"ai","content":last_msg.content})
+                st.chat_message("ai").write(last_msg.content)
     
-    
-    
-
-
-
+    st.session_state.chat_disabled = False
 
