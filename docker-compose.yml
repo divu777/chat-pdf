@@ -1,5 +1,20 @@
 services:
 
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - OPENAI_API_KEY=${OPENAI_API_KEY}
+
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+
+    depends_on:
+      - vectordb
+
   vectordb:
     image: qdrant/qdrant
     ports:

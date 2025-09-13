@@ -46,7 +46,7 @@ def load_document(temp_path,file):
         collection_name=file.name,
         embedding=embedder,
         documents=split_docs,
-        url="http://localhost:6333",
+        url="http://vectordb:6333",
     )
 
     print("Indexing done for the pdf")
@@ -81,7 +81,7 @@ def similarity_search(state:State):
 
     vector_store = QdrantVectorStore.from_existing_collection(
         collection_name=collection_name,
-        url='http//localhost:6333',
+        url='http//vectordb:6333',
         embedding=embedder
     )
 
